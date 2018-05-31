@@ -1,6 +1,6 @@
 # network-simple-wss
 
-[![Build Status](https://secure.travis-ci.org/k0001/network-simple-wss.png)](http://travis-ci.org/k0001/network-simple-wss)
+Build running `nix-build`.
 
 Secure WebSockets (WSS) in Haskell.
 
