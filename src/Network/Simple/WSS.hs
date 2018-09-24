@@ -2,10 +2,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Network.Simple.WSS
- ( -- * Client side
-   connect
+ ( W.Connection
  , send
  , recv
+   -- * Client side
+ , connect
  ) where
 
 
