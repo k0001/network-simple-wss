@@ -8,8 +8,8 @@ module Network.Simple.WSS
  , recv
    -- * Client side
  , connect
-   -- * Url
- , Url(Url)
+   -- * Uri
+ , Uri(..)
  , renderUrl
  ) where
 
@@ -28,29 +28,28 @@ import qualified Network.WebSockets.Stream as W (Stream, makeStream)
 
 --------------------------------------------------------------------------------
 
--- Secure WebSockets URL (@wss://@).
-data Url = Url
-  T.HostName
-  -- ^ Server host name (e.g., @\"www.example.com\"@ or IP address).
-  T.ServiceName
-  -- ^ Server port (e.g., @\"443\"@ or @\"www"\@).
-  String
-  -- ^ WebSocket resource (e.g., @\"/foo?bar=baz\"@).
-  --
-  -- Leading @\'/'@ is optional.
-  deriving (Eq, Ord, Show, Read)
+-- Secure WebSockets URI (@wss://@).
+data Uri = Uri
+  { uri_host :: T.HostName
+    -- ^ Server host name (e.g., @\"www.example.com\"@ or IP address).
+  , uri_port :: T.ServiceName
+    -- ^ Server port (e.g., @\"443\"@ or @\"www"\@).
+  , uri_resource :: String
+    -- ^ WebSocket resource (e.g., @\"foo/qux?bar=wat&baz\"@).
+    --
+    -- No leading @\'/\'@.
+  } deriving (Eq, Ord, Show, Read)
 
--- Render the 'Url' as a @wss://@ URL.
-renderUrl :: Url -> String
-renderUrl (Url hn sn res) = mconcat
-  [ "wss://", hn, ":", sn, "/", dropWhile (=='/') res ]
+-- Render the 'Uri' as a @wss://@ URI.
+renderUrl :: Uri -> String
+renderUrl (Uri hn sn res) = "wss://" <> hn <> ":" <> sn <> "/" <> res
 
 --------------------------------------------------------------------------------
 
 connect
   :: (MonadIO m, Ex.MonadMask m)
   => T.ClientSettings  -- ^ TLS settings.
-  -> Url -- ^ URL of the Secure WebSocket resource.
+  -> Uri -- ^ URI of the Secure WebSocket resource.
   -> [(String, String)]
   -- ^ Extra HTTP Headers
   -- (e.g., @[(\"Authorization\", \"Basic dXNlcjpwYXNzd29yZA==\")]@).
@@ -58,7 +57,7 @@ connect
   -- ^ Computation to run after establishing a Secure WebSocket to the remote
   -- server. Takes the WebSocket connection and remote end address.
   -> m r
-connect cs (Url hn sn res) hds act = do
+connect cs (Uri hn sn res) hds act = do
   let hds' :: W.Headers = map (bimap fromString fromString) hds
       res' :: String = '/' : dropWhile (=='/') res
       hnsn :: String = hn ++ ":" ++ sn
