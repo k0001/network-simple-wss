@@ -24,7 +24,7 @@ library
   build-depends:
     base >=4.7 && <5.0,
     bytestring,
-    exceptions,
+    safe-exceptions,
     network-simple-tls >=0.3,
     websockets
   ghc-options: -Wall -O2

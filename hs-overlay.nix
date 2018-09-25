@@ -48,10 +48,13 @@ pkg-websockets =
     license = stdenv.lib.licenses.bsd3;
   };
 
+inherit (pkgs.haskell.lib) doJailbreak;
+
 in
 pkgs.lib.composeExtensions
   (import "${src-network-simple-tls}/hs-overlay.nix" { inherit pkgs; })
   (self: super: {
      network-simple-wss = super.callPackage ./pkg.nix {};
      websockets = super.callPackage pkg-websockets {};
+     safe-exceptions = doJailbreak super.safe-exceptions;
   })

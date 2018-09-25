@@ -15,11 +15,12 @@ module Network.Simple.WSS
 
 
 import Control.Monad.IO.Class (MonadIO, liftIO)
-import qualified Control.Monad.Catch as Ex
+import qualified Control.Exception.Safe as Ex
 import Data.Bifunctor (bimap)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import Data.Foldable (traverse_)
+import Data.Function (fix)
 import Data.String (fromString)
 
 import qualified Network.Simple.TCP.TLS as T
@@ -80,17 +81,24 @@ streamFromContext ctx = liftIO $ do
 -- | Receive bytes from the remote end.
 --
 -- Returns a strict 'BL.ByteString'.
+--
+-- Returns an empty string when the remote end gracefully closes the connection.
 
 -- Note: The WebSocket protocol supports the silly idea of sending text, rather
 -- than bytes, over the socket. We don't support that. If necessary, users can
 -- find support for this in the `websockets` library.
 recv :: MonadIO m => W.Connection -> m B.ByteString
 {-# INLINABLE recv #-}
-recv c = liftIO $ do
-  dm <- W.receiveDataMessage c
-  pure (BL.toStrict (case dm of
-     W.Text b _ -> b
-     W.Binary b -> b))
+recv c = liftIO $ fix $ \k -> do
+  ea <- Ex.try (W.receiveDataMessage c)
+  case ea of
+     Right (W.Text "" _) -> k
+     Right (W.Text bl _) -> pure (BL.toStrict bl)
+     Right (W.Binary "") -> k
+     Right (W.Binary bl) -> pure (BL.toStrict bl)
+     Left (W.CloseRequest 1000 _) -> pure ""
+     Left (W.CloseRequest 1001 _) -> pure ""
+     Left e -> Ex.throw e
 
 -- | Send bytes to the remote end.
 --
@@ -101,6 +109,7 @@ recv c = liftIO $ do
 -- find support for this in the `websockets` library.
 send :: MonadIO m => W.Connection -> BL.ByteString -> m ()
 {-# INLINABLE send #-}
-send c =
-  liftIO . W.sendDataMessages c . map (W.Binary . BL.fromStrict) . BL.toChunks
+send c = \bl -> liftIO $ do
+  let dms = map (W.Binary . BL.fromStrict) (BL.toChunks bl)
+  W.sendDataMessages c dms
 
