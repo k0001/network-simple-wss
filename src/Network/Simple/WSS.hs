@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StrictData #-}
 
 module Network.Simple.WSS
  ( W.Connection
@@ -7,6 +8,9 @@ module Network.Simple.WSS
  , recv
    -- * Client side
  , connect
+   -- * Url
+ , Url
+ , renderUrl
  ) where
 
 
@@ -24,12 +28,29 @@ import qualified Network.WebSockets.Stream as W (Stream, makeStream)
 
 --------------------------------------------------------------------------------
 
+-- Secure WebSockets URL (@wss://@).
+data Url = Url
+  T.HostName
+  -- ^ Server host name (e.g., @\"www.example.com\"@ or IP address).
+  T.ServiceName
+  -- ^ Server port (e.g., @\"443\"@ or @\"www"\@).
+  String
+  -- ^ WebSocket resource (e.g., @\"/foo?bar=baz\"@).
+  --
+  -- Leading @\'/'@ is optional.
+  deriving (Eq, Ord, Show, Read)
+
+-- Render the 'Url' as a @wss://@ URL.
+renderUrl :: Url -> String
+renderUrl (Url hn sn res) = mconcat
+  [ "wss://", hn, ":", sn, "/", dropWhile (=='/') res ]
+
+--------------------------------------------------------------------------------
+
 connect
   :: (MonadIO m, Ex.MonadMask m)
   => T.ClientSettings  -- ^ TLS settings.
-  -> T.HostName  -- ^ Server host name (e.g., @\"www.example.com\"@).
-  -> T.ServiceName  -- ^ Server port (e.g., @\"443\"@).
-  -> String -- ^ WebSocket resource (e.g., @\"/foo?bar=baz\"@).
+  -> Url -- ^ URL of the Secure WebSocket resource.
   -> [(String, String)]
   -- ^ Extra HTTP Headers
   -- (e.g., @[(\"Authorization\", \"Basic dXNlcjpwYXNzd29yZA==\")]@).
@@ -37,14 +58,16 @@ connect
   -- ^ Computation to run after establishing a Secure WebSocket to the remote
   -- server. Takes the WebSocket connection and remote end address.
   -> m r
-connect cs hn sn res hds act = do
+connect cs (Url hn sn res) hds act = do
   let hds' :: W.Headers = map (bimap fromString fromString) hds
       res' :: String = '/' : dropWhile (=='/') res
       hnsn :: String = hn ++ ":" ++ sn
       wopts :: W.ConnectionOptions = W.defaultConnectionOptions
-        { W.connectionStrictUnicode = False -- Slows stuff down. And see 'recv'.
+        { W.connectionStrictUnicode =
+            False -- Slows stuff down. And see 'recv'.
         , W.connectionCompressionOptions =
-            W.PermessageDeflateCompression W.defaultPermessageDeflate }
+            W.PermessageDeflateCompression
+               W.defaultPermessageDeflate }
   T.connect cs hn sn $ \(ctx, saddr) -> do
      stream <- streamFromContext ctx
      conn <- liftIO (W.newClientConnection stream hnsn res' wopts hds')
