@@ -9,7 +9,7 @@ module Network.Simple.WSS
    -- * Client side
  , connect
    -- * Url
- , Url
+ , Url(Url)
  , renderUrl
  ) where
 
