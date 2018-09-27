@@ -25,7 +25,7 @@ import Data.String (fromString)
 
 import qualified Network.Simple.TCP.TLS as T
 import qualified Network.WebSockets as W
-import qualified Network.WebSockets.Stream as W (Stream, makeStream)
+import qualified Network.WebSockets.Stream as W (Stream, makeStream, close)
 
 --------------------------------------------------------------------------------
 
@@ -47,6 +47,7 @@ renderUrl (Uri hn sn res) = "wss://" <> hn <> ":" <> sn <> "/" <> res
 
 --------------------------------------------------------------------------------
 
+-- | Connect to the specified WSS server.
 connect
   :: (MonadIO m, Ex.MonadMask m)
   => T.ClientSettings  -- ^ TLS settings.
@@ -58,7 +59,23 @@ connect
   -- ^ Computation to run after establishing a Secure WebSocket to the remote
   -- server. Takes the WebSocket connection and remote end address.
   -> m r
-connect cs (Uri hn sn res) hds act = do
+connect cs uri@(Uri hn sn _) hds act = do
+  T.connect cs hn sn $ \(ctx, saddr) -> do
+     Ex.bracket (streamFromContext ctx) (liftIO . W.close) $ \stream -> do
+        conn <- connectionFromStream stream uri hds
+        liftIO (W.forkPingThread conn 30)
+        act (conn, saddr)
+
+-- | Obtain a 'W.Connection' to the specified 'Uri' over the given 'W.Stream'.
+connectionFromStream
+  :: MonadIO m
+  => W.Stream -- ^ Stream on which to establish the WebSockets connection.
+  -> Uri -- ^ URI of the Secure WebSocket resource.
+  -> [(String, String)]
+  -- ^ Extra HTTP Headers
+  -- (e.g., @[(\"Authorization\", \"Basic dXNlcjpwYXNzd29yZA==\")]@).
+  -> m W.Connection -- ^ Established WebSockets connection
+connectionFromStream stream (Uri hn sn res) hds = liftIO $ do
   let hds' :: W.Headers = map (bimap fromString fromString) hds
       res' :: String = '/' : dropWhile (=='/') res
       hnsn :: String = hn ++ ":" ++ sn
@@ -68,11 +85,9 @@ connect cs (Uri hn sn res) hds act = do
         , W.connectionCompressionOptions =
             W.PermessageDeflateCompression
                W.defaultPermessageDeflate }
-  T.connect cs hn sn $ \(ctx, saddr) -> do
-     stream <- streamFromContext ctx
-     conn <- liftIO (W.newClientConnection stream hnsn res' wopts hds')
-     act (conn, saddr)
+  W.newClientConnection stream hnsn res' wopts hds'
 
+-- | Obtain a 'W.Stream' implemented using the given TLS 'T.Context'.
 streamFromContext :: MonadIO m => T.Context -> m W.Stream
 streamFromContext ctx = liftIO $ do
   W.makeStream (T.recv ctx)
@@ -110,6 +125,5 @@ recv c = liftIO $ fix $ \k -> do
 send :: MonadIO m => W.Connection -> BL.ByteString -> m ()
 {-# INLINABLE send #-}
 send c = \bl -> liftIO $ do
-  let dms = map (W.Binary . BL.fromStrict) (BL.toChunks bl)
-  W.sendDataMessages c dms
+  W.sendDataMessages c (map (W.Binary . BL.fromStrict) (BL.toChunks bl))
 

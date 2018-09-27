@@ -5,7 +5,7 @@ hs = pkgs.haskell.lib;
 
 src-network-simple-tls = builtins.fetchGit {
   url = "https://github.com/k0001/network-simple-tls";
-  rev = "caa207faaa7f48c846780d164fffbafa7b2de612";
+  rev = "68a152e8e834ed3e0b5f5cac9d60927df385e682";
 };
 
 src-websockets = builtins.fetchTarball {
