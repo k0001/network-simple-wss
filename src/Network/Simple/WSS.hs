@@ -8,9 +8,9 @@ module Network.Simple.WSS
  , recv
    -- * Client side
  , connect
-   -- * Uri
- , Uri(..)
- , renderUrl
+   -- * Low level
+ , connectionFromStream
+ , streamFromContext
  ) where
 
 
@@ -29,53 +29,50 @@ import qualified Network.WebSockets.Stream as W (Stream, makeStream, close)
 
 --------------------------------------------------------------------------------
 
--- Secure WebSockets URI (@wss://@).
-data Uri = Uri
-  { uri_host :: T.HostName
-    -- ^ Server host name (e.g., @\"www.example.com\"@ or IP address).
-  , uri_port :: T.ServiceName
-    -- ^ Server port (e.g., @\"443\"@ or @\"www"\@).
-  , uri_resource :: String
-    -- ^ WebSocket resource (e.g., @\"foo/qux?bar=wat&baz\"@).
-    --
-    -- No leading @\'/\'@.
-  } deriving (Eq, Ord, Show, Read)
-
--- Render the 'Uri' as a @wss://@ URI.
-renderUrl :: Uri -> String
-renderUrl (Uri hn sn res) = "wss://" <> hn <> ":" <> sn <> "/" <> res
-
---------------------------------------------------------------------------------
-
--- | Connect to the specified WSS server.
+-- | Connect to the specified Secure WebSockets server server.
 connect
   :: (MonadIO m, Ex.MonadMask m)
   => T.ClientSettings  -- ^ TLS settings.
-  -> Uri -- ^ URI of the Secure WebSocket resource.
+  -> T.HostName
+  -- ^ Secure WebSockets server host name (e.g., @\"www.example.com\"@ or IP
+  -- address).
+  -> T.ServiceName
+  -- ^ Secure WebSockets server port (e.g., @\"443\"@ or @\"www"\@).
+  -> String
+  -- ^ Secure WebSockets resource (e.g., @\"foo\/qux?bar=wat&baz\"@).
+  --
+  -- Leading @\'\/\'@ is optional.
   -> [(String, String)]
   -- ^ Extra HTTP Headers
   -- (e.g., @[(\"Authorization\", \"Basic dXNlcjpwYXNzd29yZA==\")]@).
   -> ((W.Connection, T.SockAddr) -> m r)
-  -- ^ Computation to run after establishing a Secure WebSocket to the remote
-  -- server. Takes the WebSocket connection and remote end address.
+  -- ^ Computation to run after establishing a Secure WebSockets to the remote
+  -- server. Takes the WebSockets connection and remote end address.
   -> m r
-connect cs uri@(Uri hn sn _) hds act = do
+connect cs hn sn res hds act = do
   T.connect cs hn sn $ \(ctx, saddr) -> do
      Ex.bracket (streamFromContext ctx) (liftIO . W.close) $ \stream -> do
-        conn <- connectionFromStream stream uri hds
+        conn <- connectionFromStream stream hn sn res hds
         liftIO (W.forkPingThread conn 30)
         act (conn, saddr)
 
--- | Obtain a 'W.Connection' to the specified 'Uri' over the given 'W.Stream'.
+-- | Obtain a 'W.Connection' to the specified 'Uri' over the given 'W.Stream',
+-- connected to either a WebSockets server, o a Secure WebSockets server.
 connectionFromStream
   :: MonadIO m
   => W.Stream -- ^ Stream on which to establish the WebSockets connection.
-  -> Uri -- ^ URI of the Secure WebSocket resource.
+  -> T.HostName
+  -- ^ WebSockets server host name (e.g., @\"www.example.com\"@ or IP address).
+  -> T.ServiceName -- ^ WebSockets server port (e.g., @\"443\"@ or @\"www"\@).
+  -> String
+  -- ^ WebSockets resource (e.g., @\"foo\/qux?bar=wat&baz\"@).
+  --
+  -- Leading @\'\/\'@ is optional.
   -> [(String, String)]
   -- ^ Extra HTTP Headers
   -- (e.g., @[(\"Authorization\", \"Basic dXNlcjpwYXNzd29yZA==\")]@).
   -> m W.Connection -- ^ Established WebSockets connection
-connectionFromStream stream (Uri hn sn res) hds = liftIO $ do
+connectionFromStream stream hn sn res hds = liftIO $ do
   let hds' :: W.Headers = map (bimap fromString fromString) hds
       res' :: String = '/' : dropWhile (=='/') res
       hnsn :: String = hn ++ ":" ++ sn
@@ -99,7 +96,7 @@ streamFromContext ctx = liftIO $ do
 --
 -- Returns an empty string when the remote end gracefully closes the connection.
 
--- Note: The WebSocket protocol supports the silly idea of sending text, rather
+-- Note: The WebSockets protocol supports the silly idea of sending text, rather
 -- than bytes, over the socket. We don't support that. If necessary, users can
 -- find support for this in the `websockets` library.
 recv :: MonadIO m => W.Connection -> m B.ByteString
@@ -119,7 +116,7 @@ recv c = liftIO $ fix $ \k -> do
 --
 -- Takes a lazy 'BL.ByteString'.
 
--- Note: The WebSocket protocol supports the silly idea of sending text, rather
+-- Note: The WebSockets protocol supports the silly idea of sending text, rather
 -- than bytes, over the socket. We don't support that. If necessary, users can
 -- find support for this in the `websockets` library.
 send :: MonadIO m => W.Connection -> BL.ByteString -> m ()
