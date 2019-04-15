@@ -84,7 +84,10 @@ connectionFromStream stream hn sn res hds = liftIO $ do
                W.defaultPermessageDeflate }
   W.newClientConnection stream hnsn res' wopts hds'
 
--- | Obtain a 'W.Stream' implemented using the given TLS 'T.Context'.
+-- | Obtain a 'W.Stream' implemented using the given TLS 'T.Context'. You can
+-- use the
+-- [https://hackage.haskell.org/package/network-simple-tls](network-simple-tls)
+-- library to get one of those.
 streamFromContext :: MonadIO m => T.Context -> m W.Stream
 streamFromContext ctx = liftIO $ do
   W.makeStream (T.recv ctx)
