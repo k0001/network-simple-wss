@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StrictData #-}
@@ -39,7 +40,7 @@ import qualified Network.WebSockets.Stream as W (Stream, makeStream, close)
 -- | Connect to the specified Secure WebSockets server.
 connect
   :: (MonadIO m, Ex.MonadMask m)
-  => T.ClientSettings  -- ^ TLS settings.
+  => T.ClientParams  -- ^ TLS settings.
   -> T.HostName
   -- ^ Secure WebSockets server host name (e.g., @\"www.example.com\"@ or IP
   -- address).
@@ -60,7 +61,7 @@ connect cs hn sn res hds act = do
   T.connect cs hn sn $ \(ctx, saddr) -> do
      Ex.bracket (streamFromContext ctx) (liftIO . W.close) $ \stream -> do
         conn <- WS.clientConnectionFromStream stream hn sn res hds
-        liftIO (W.forkPingThread conn 30)
+        liftIO (pingThread conn 30)
         act (conn, saddr)
 
 -- | Like 'connect', but connects to the destination server through a SOCKS5
@@ -69,7 +70,7 @@ connectOverSOCKS5
   :: (MonadIO m, Ex.MonadMask m)
   => T.HostName -- ^ SOCKS5 proxy server hostname or IP address.
   -> T.ServiceName -- ^ SOCKS5 proxy server service port name or number.
-  -> T.ClientSettings -- ^ TLS settings.
+  -> T.ClientParams -- ^ TLS settings.
   -> T.HostName
   -- ^ Destination Secure WebSockets server hostname or IP address. We connect
   -- to this host /through/ the SOCKS5 proxy specified in the previous
@@ -96,7 +97,7 @@ connectOverSOCKS5 phn psn tcs dhn dsn res hds act = do
   T.connectOverSOCKS5 phn psn tcs dhn dsn $ \(ctx, pa, da) -> do
     Ex.bracket (streamFromContext ctx) (liftIO . W.close) $ \stream -> do
       conn <- WS.clientConnectionFromStream stream dhn dsn res hds
-      liftIO (W.forkPingThread conn 30)
+      liftIO (pingThread conn 30)
       act (conn, pa, da)
 
 -- | Obtain a 'W.Stream' implemented using the given TLS 'T.Context'. You can
@@ -106,4 +107,11 @@ connectOverSOCKS5 phn psn tcs dhn dsn res hds act = do
 streamFromContext :: MonadIO m => T.Context -> m W.Stream
 streamFromContext ctx = liftIO $ do
   W.makeStream (T.recv ctx) (traverse_ (T.sendLazy ctx))
+
+pingThread :: W.Connection -> Int -> IO ()
+#if MIN_VERSION_websockets(0,12,6)
+pingThread connection sec = W.withPingThread connection sec (pure ()) (pure ())
+#else
+pingThread connection sec = (W.forkPingThread connection sec)
+#endif
 
