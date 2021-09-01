@@ -24,6 +24,7 @@ module Network.Simple.WSS
  ) where
 
 
+import qualified Control.Concurrent.Async as Async
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import qualified Control.Exception.Safe as Ex
 import qualified Data.ByteString as B
@@ -32,6 +33,7 @@ import Data.Foldable (traverse_)
 import qualified Network.Simple.TCP.TLS as T
 import qualified Network.Simple.WS as WS
 import qualified Network.WebSockets as W
+import qualified Network.WebSockets.Connection as W (pingThread)
 import qualified Network.WebSockets.Stream as W (Stream, makeStream, close)
 
 --------------------------------------------------------------------------------
@@ -39,7 +41,7 @@ import qualified Network.WebSockets.Stream as W (Stream, makeStream, close)
 -- | Connect to the specified Secure WebSockets server.
 connect
   :: (MonadIO m, Ex.MonadMask m)
-  => T.ClientSettings  -- ^ TLS settings.
+  => T.ClientParams  -- ^ TLS settings.
   -> T.HostName
   -- ^ Secure WebSockets server host name (e.g., @\"www.example.com\"@ or IP
   -- address).
@@ -60,8 +62,8 @@ connect cs hn sn res hds act = do
   T.connect cs hn sn $ \(ctx, saddr) -> do
      Ex.bracket (streamFromContext ctx) (liftIO . W.close) $ \stream -> do
         conn <- WS.clientConnectionFromStream stream hn sn res hds
-        liftIO (W.forkPingThread conn 30)
-        act (conn, saddr)
+        withAsync (W.pingThread conn 30 (pure ())) $ \_ -> 
+          act (conn, saddr)
 
 -- | Like 'connect', but connects to the destination server through a SOCKS5
 -- proxy.
@@ -69,7 +71,7 @@ connectOverSOCKS5
   :: (MonadIO m, Ex.MonadMask m)
   => T.HostName -- ^ SOCKS5 proxy server hostname or IP address.
   -> T.ServiceName -- ^ SOCKS5 proxy server service port name or number.
-  -> T.ClientSettings -- ^ TLS settings.
+  -> T.ClientParams -- ^ TLS settings.
   -> T.HostName
   -- ^ Destination Secure WebSockets server hostname or IP address. We connect
   -- to this host /through/ the SOCKS5 proxy specified in the previous
@@ -96,8 +98,8 @@ connectOverSOCKS5 phn psn tcs dhn dsn res hds act = do
   T.connectOverSOCKS5 phn psn tcs dhn dsn $ \(ctx, pa, da) -> do
     Ex.bracket (streamFromContext ctx) (liftIO . W.close) $ \stream -> do
       conn <- WS.clientConnectionFromStream stream dhn dsn res hds
-      liftIO (W.forkPingThread conn 30)
-      act (conn, pa, da)
+      withAsync (W.pingThread conn 30 (pure ())) $ \_ -> 
+        act (conn, pa, da)
 
 -- | Obtain a 'W.Stream' implemented using the given TLS 'T.Context'. You can
 -- use the
@@ -106,4 +108,15 @@ connectOverSOCKS5 phn psn tcs dhn dsn res hds act = do
 streamFromContext :: MonadIO m => T.Context -> m W.Stream
 streamFromContext ctx = liftIO $ do
   W.makeStream (T.recv ctx) (traverse_ (T.sendLazy ctx))
+
+-- | Like 'Async.async', but generalized to 'Ex.MonadMask' and 'MonadIO'.
+withAsync 
+  :: (Ex.MonadMask m, MonadIO m) 
+  => IO a 
+  -> (Async.Async a -> m b) 
+  -> m b
+withAsync io k = Ex.mask $ \unmaskM -> do
+  aa <- liftIO $ Async.asyncWithUnmask (\unmaskIO -> unmaskIO io)
+  Ex.finally (unmaskM (k aa)) 
+             (liftIO (Async.uninterruptibleCancel aa))
 

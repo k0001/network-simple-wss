@@ -1,5 +1,5 @@
 name: network-simple-wss
-version: 0.1
+version: 0.1.1
 synopsis: Simple interface to TLS secured WebSockets.
 description: Simple interface to TLS secured WebSockets.
 homepage: https://github.com/k0001/network-simple-wss
@@ -23,10 +23,11 @@ library
   exposed-modules: Network.Simple.WSS
   ghc-options: -Wall -O2
   build-depends:
+    async,
     base >=4.7 && <5.0,
     bytestring,
     safe-exceptions,
-    network-simple-tls >=0.3.2,
+    network-simple-tls >=0.4,
     network-simple-ws,
-    websockets
+    websockets >=0.12.6
 

@@ -1,1 +1,1 @@
-(import ./default.nix {}).network-simple-wss.env
+(import ./default.nix {})._shell
