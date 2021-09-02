@@ -13,9 +13,12 @@
 -- intreresting from a client's point of view. Server side support will come
 -- later.
 module Network.Simple.WSS
- ( W.Connection
- , WS.send
+ ( -- * Sending and receiving
+   W.Connection
  , WS.recv
+ , WS.send
+ , WS.sendClose
+ , WS.Close(..)
    -- * Client side
  , connect
  , connectOverSOCKS5

@@ -3,7 +3,7 @@
 }:
 mkDerivation {
   pname = "network-simple-wss";
-  version = "0.1.1";
+  version = "0.2";
   src = ./.;
   libraryHaskellDepends = [
     async base bytestring network-simple-tls network-simple-ws
