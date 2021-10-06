@@ -6,7 +6,8 @@
 * /COMPILER ASSISTED BREAKING CHANGE:/ `recv`'s close semantics have 
   improved. See its documentation for details.
 
-* Added `Close`, `sendClose`.
+* Re-exported `close` and `clientConnectionFromStream` from 
+  `network-simple-ws`.
 
 * Depend on `network-simple-tls >=0.4`.
 

@@ -14,15 +14,15 @@
 -- later.
 module Network.Simple.WSS
  ( -- * Sending and receiving
-   W.Connection
+   WS.Connection
  , WS.recv
  , WS.send
- , WS.sendClose
- , WS.Close(..)
+ , WS.close
    -- * Client side
  , connect
  , connectOverSOCKS5
    -- * Low level
+ , WS.clientConnectionFromStream
  , streamFromContext
  ) where
 
@@ -113,13 +113,12 @@ streamFromContext ctx = liftIO $ do
   W.makeStream (T.recv ctx) (traverse_ (T.sendLazy ctx))
 
 -- | Like 'Async.async', but generalized to 'Ex.MonadMask' and 'MonadIO'.
-withAsync 
+withAsync
   :: (Ex.MonadMask m, MonadIO m) 
   => IO a 
   -> (Async.Async a -> m b) 
   -> m b
-withAsync io k = Ex.mask $ \unmaskM -> do
-  aa <- liftIO $ Async.asyncWithUnmask (\unmaskIO -> unmaskIO io)
-  Ex.finally (unmaskM (k aa)) 
-             (liftIO (Async.uninterruptibleCancel aa))
+withAsync io = Ex.bracket
+  (liftIO $ Async.asyncWithUnmask (\u -> u io))
+  (liftIO . Async.uninterruptibleCancel)
 
